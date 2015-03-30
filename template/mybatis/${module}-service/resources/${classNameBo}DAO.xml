@@ -169,6 +169,9 @@ selectList
             AND ${column.sqlName} = <@mapperEl 'id'/>
             </#list>
         </trim>
+        <if test="orderBy!=null">
+        ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+        </if>
     </select>
 
     <select id="findOne" parameterType="java.util.Map" resultType="${className}">
@@ -184,12 +187,18 @@ selectList
         <include refid="Base_Column_List" />
         FROM ${table.sqlName} WHERE
         <@jspEl 'property'/> = <@mapperEl 'value'/>
+        <if test="orderBy!=null">
+            ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+        </if>
     </select>
 
     <select id="findAll" resultType="${className}">
         SELECT
         <include refid="Base_Column_List" />
         FROM ${table.sqlName}
+        <if test="orderBy!=null">
+            ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+        </if>
     </select>
 
     <select id="queryPage" resultType="${className}">
@@ -211,6 +220,9 @@ selectList
 
     </where>
 
+        <if test="orderBy!=null">
+        ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+        </if>
         <if test="offset != null">
             limit <@jspEl 'offset'/>, <@jspEl 'rows'/>
         </if>
@@ -227,6 +239,9 @@ selectList
             </if>
             </#list>
         </trim>
+        <if test="orderBy!=null">
+        ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+        </if>
     </select>
 
 
@@ -270,7 +285,9 @@ selectList
        </#list>
 
        </where>
-
+    <if test="orderBy!=null">
+        ORDER BY <@jspEl 'orderBy'/> <@jspEl 'sortBy'/>
+    </if>
     </select>
 
     <select id="selectMaxId" resultType="${idJavaType}">
