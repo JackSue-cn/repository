@@ -267,8 +267,8 @@ selectList
         FROM ${table.sqlName}
         <trim prefix="WHERE" prefixOverrides="AND | OR">
             <#list table.columns as column>
-            <if test="${column.columnNameFirstLower}!=null">
-                AND ${column.sqlName} = <@mapperEl column.columnNameFirstLower/>
+            <if test="condition.${column.columnNameFirstLower}!=null">
+                AND ${column.sqlName} = <@conditionMapperEl column.columnNameFirstLower/>
             </if>
             </#list>
         </trim>
