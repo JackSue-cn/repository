@@ -1,22 +1,6 @@
 package cn.org.rapid_framework.generator.provider.db.table;
 
 
-import java.io.File;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-
 import cn.org.rapid_framework.generator.GeneratorProperties;
 import cn.org.rapid_framework.generator.provider.db.DataSourceProvider;
 import cn.org.rapid_framework.generator.provider.db.table.model.Column;
@@ -24,13 +8,14 @@ import cn.org.rapid_framework.generator.provider.db.table.model.ParentRes;
 import cn.org.rapid_framework.generator.provider.db.table.model.Table;
 import cn.org.rapid_framework.generator.provider.db.table.model.util.NumGen;
 import cn.org.rapid_framework.generator.provider.db.table.model.util.SeqGen;
-import cn.org.rapid_framework.generator.util.BeanHelper;
-import cn.org.rapid_framework.generator.util.FileHelper;
-import cn.org.rapid_framework.generator.util.GLogger;
-import cn.org.rapid_framework.generator.util.StringHelper;
-import cn.org.rapid_framework.generator.util.XMLHelper;
+import cn.org.rapid_framework.generator.util.*;
 import cn.org.rapid_framework.generator.util.XMLHelper.NodeData;
 import cn.thinkjoy.codegen.GeneratorMain;
+import com.google.common.collect.Sets;
+
+import java.io.File;
+import java.sql.*;
+import java.util.*;
 
 /**
  * 
@@ -44,10 +29,10 @@ import cn.thinkjoy.codegen.GeneratorMain;
  * @email badqiu(a)gmail.com
  */
 public class TableFactory {
-	
-	private DbHelper dbHelper = new DbHelper();
-	private static TableFactory instance = null;
 
+    private static TableFactory instance = null;
+    private final Set<String> IGNORE_TABLES = Sets.newHashSet("v_master_care");
+    private DbHelper dbHelper = new DbHelper();
     private List<Table> tables = new ArrayList<Table>();
     private Map<String, ParentRes> parentResMap = new HashMap<String, ParentRes>();
 	
@@ -106,29 +91,22 @@ public class TableFactory {
 		}
 		return t;
 	}
-	
-	public static class NotFoundTableException extends RuntimeException {
-		private static final long serialVersionUID = 5976869128012158628L;
-		public NotFoundTableException(String message) {
-			super(message);
-		}
-	}
 
-	private Table _getTable(String catalog,String schema,String tableName) throws SQLException {
-	    if(tableName== null || tableName.trim().length() == 0) 
-	         throw new IllegalArgumentException("tableName must be not empty");
-	    catalog = StringHelper.defaultIfEmpty(catalog, null);
-	    schema = StringHelper.defaultIfEmpty(schema, null);
-	    
-		Connection conn = getConnection();
-		DatabaseMetaData dbMetaData = conn.getMetaData();
-		ResultSet rs = dbMetaData.getTables(catalog, schema, tableName, null);
-		while(rs.next()) {
-			Table table = createTable(conn, rs);
-			return table;
-		}
-		return null;
-	}
+    private Table _getTable(String catalog, String schema, String tableName) throws SQLException {
+        if (tableName == null || tableName.trim().length() == 0)
+            throw new IllegalArgumentException("tableName must be not empty");
+        catalog = StringHelper.defaultIfEmpty(catalog, null);
+        schema = StringHelper.defaultIfEmpty(schema, null);
+
+        Connection conn = getConnection();
+        DatabaseMetaData dbMetaData = conn.getMetaData();
+        ResultSet rs = dbMetaData.getTables(catalog, schema, tableName, null);
+        while (rs.next()) {
+            Table table = createTable(conn, rs);
+            return table;
+        }
+        return null;
+    }
 
 	private Table createTable(Connection conn, ResultSet rs) throws SQLException {
 		String realTableName = null;
@@ -184,13 +162,13 @@ public class TableFactory {
 //            if(parentRes != null) {
 //                table.setLongnumber(parentRes.getNumber() + "_" + table.getNumber());
 //            }
-			
+
 			if ("SYNONYM".equals(tableType) && dbHelper.isOracleDataBase()) {
 			    table.setOwnerSynonymName(getSynonymOwner(realTableName));
 			}
-			
+
 			retriveTableColumns(table);
-			
+
 			table.initExportedKeys(conn.getMetaData());
 			table.initImportedKeys(conn.getMetaData());
 			BeanHelper.copyProperties(table, TableOverrideValuesProvider.getTableOverrideValues(table.getSqlName()));
@@ -214,7 +192,14 @@ public class TableFactory {
 		//List tables = new ArrayList();
         if(tables.size() == 0) {
             while (rs.next()) {
-                tables.add(createTable(conn, rs));
+                Table table = createTable(conn, rs);
+                //由于codegen在执行过程中遇到视图就因为没有主键而出错
+                //所以在此配置一下要忽略的表名称，或者视图名称。
+                if (IGNORE_TABLES.contains(table.getSqlName())) {
+                    continue;
+                }
+
+                tables.add(table);
             }
 
             //handle number and parent props
@@ -269,7 +254,7 @@ public class TableFactory {
 	      }
 	      return ret;
 	   }
-   
+
    private String getDatabaseStructureInfo() {
 	      ResultSet schemaRs = null;
 	      ResultSet catalogRs = null;
@@ -307,17 +292,17 @@ public class TableFactory {
 	      }
 	      return sb.toString();
     }
-	   
-	private DatabaseMetaData getMetaData() throws SQLException {
+
+    private DatabaseMetaData getMetaData() throws SQLException {
 		return getConnection().getMetaData();
 	}
-	
-	private void retriveTableColumns(Table table) throws SQLException {
+
+    private void retriveTableColumns(Table table) throws SQLException {
 	      GLogger.trace("-------setColumns(" + table.getSqlName() + ")");
 
 	      List primaryKeys = getTablePrimaryKeys(table);
 	      table.setPrimaryKeyColumns(primaryKeys);
-	      
+
 	      // get the indices and unique columns
 	      List indices = new LinkedList();
 	      // maps index names to a list of columns in the index
@@ -376,23 +361,23 @@ public class TableFactory {
 	      }
 	}
 
-	private List getTableColumns(Table table, List primaryKeys, List indices, Map uniqueIndices, Map uniqueColumns) throws SQLException {
+    private List getTableColumns(Table table, List primaryKeys, List indices, Map uniqueIndices, Map uniqueColumns) throws SQLException {
 		// get the columns
 	      List columns = new LinkedList();
 	      ResultSet columnRs = getColumnsResultSet(table);
-	      
-	      while (columnRs.next()) {
+
+        while (columnRs.next()) {
 	         int sqlType = columnRs.getInt("DATA_TYPE");
 	         String sqlTypeName = columnRs.getString("TYPE_NAME");
 	         String columnName = columnRs.getString("COLUMN_NAME");
 	         String columnDefaultValue = columnRs.getString("COLUMN_DEF");
-	         
-	         String remarks = columnRs.getString("REMARKS");
+
+            String remarks = columnRs.getString("REMARKS");
 	         if(remarks == null && dbHelper.isOracleDataBase()) {
 	        	 remarks = getOracleColumnComments(table.getSqlName(), columnName);
 	         }
-	         
-	         // if columnNoNulls or columnNullableUnknown assume "not nullable"
+
+            // if columnNoNulls or columnNullableUnknown assume "not nullable"
 	         boolean isNullable = (DatabaseMetaData.columnNullable == columnRs.getInt("NULLABLE"));
 	         int size = columnRs.getInt("COLUMN_SIZE");
 	         int decimalDigits = columnRs.getInt("DECIMAL_DIGITS");
@@ -428,8 +413,8 @@ public class TableFactory {
 	    columnRs.close();
 		return columns;
 	}
-	
-	private ResultSet getColumnsResultSet(Table table) throws SQLException {
+
+    private ResultSet getColumnsResultSet(Table table) throws SQLException {
 		ResultSet columnRs = null;
 	    if (table.getOwnerSynonymName() != null) {
 	         columnRs = getMetaData().getColumns(getCatalog(), table.getOwnerSynonymName(), table.getSqlName(), null);
@@ -439,7 +424,7 @@ public class TableFactory {
 		return columnRs;
 	}
 
-	private List<String> getTablePrimaryKeys(Table table) throws SQLException {
+    private List<String> getTablePrimaryKeys(Table table) throws SQLException {
 		// get the primary keys
 	      List primaryKeys = new LinkedList();
 	      ResultSet primaryKeyRs = null;
@@ -466,7 +451,15 @@ public class TableFactory {
 	private String getOracleColumnComments(String table,String column)  {
 		String sql = "SELECT comments FROM user_col_comments WHERE table_name='"+table+"' AND column_name = '"+column+"'";
 		return dbHelper.queryForString(sql);
-	}
+    }
+
+    public static class NotFoundTableException extends RuntimeException {
+        private static final long serialVersionUID = 5976869128012158628L;
+
+        public NotFoundTableException(String message) {
+            super(message);
+        }
+    }
 	
 	/** 得到表的自定义配置信息 */
 	public static class TableOverrideValuesProvider {
@@ -515,8 +508,34 @@ public class TableFactory {
 			}
 		}
 	}
-	
-	class DbHelper {
+
+    public static class DatabaseMetaDataUtils {
+        public static boolean isOracleDataBase(DatabaseMetaData metadata) {
+            try {
+                boolean ret = false;
+                ret = (metadata.getDatabaseProductName().toLowerCase()
+                        .indexOf("oracle") != -1);
+                return ret;
+            } catch (SQLException s) {
+                return false;
+//				throw new RuntimeException(s);
+            }
+        }
+
+        public static boolean isHsqlDataBase(DatabaseMetaData metadata) {
+            try {
+                boolean ret = false;
+                ret = (metadata.getDatabaseProductName().toLowerCase()
+                        .indexOf("hsql") != -1);
+                return ret;
+            } catch (SQLException s) {
+                return false;
+//				throw new RuntimeException(s);
+            }
+        }
+    }
+
+    class DbHelper {
 		public void close(ResultSet rs,PreparedStatement ps,Statement... statements) {
 			try {
 				if(ps != null) ps.close();
@@ -549,31 +568,6 @@ public class TableFactory {
 			}finally {
 				close(rs,null,s);
 			}
-		}		
-	}
-	
-	public static class DatabaseMetaDataUtils {
-		public static boolean isOracleDataBase(DatabaseMetaData metadata) {
-			try {
-				boolean ret = false;
-				ret = (metadata.getDatabaseProductName().toLowerCase()
-							.indexOf("oracle") != -1);
-				return ret;
-			}catch(SQLException s) {
-				return false;
-//				throw new RuntimeException(s);
-			}
-		}
-		public static boolean isHsqlDataBase(DatabaseMetaData metadata) {
-			try {
-				boolean ret = false;
-				ret = (metadata.getDatabaseProductName().toLowerCase()
-							.indexOf("hsql") != -1);
-				return ret;
-			}catch(SQLException s) {
-				return false;
-//				throw new RuntimeException(s);
-			}
-		}		
-	}
+        }
+    }
 }
